@@ -135,14 +135,26 @@ class BillingApp(ctk.CTk):
         form.grid(row=0, column=0, sticky="ew", pady=(10, 10))
         form.grid_columnconfigure((0, 1, 2), weight=1)
 
-        self.name_entry = ctk.CTkEntry(form, placeholder_text="Product name")
-        self.name_entry.grid(row=0, column=0, sticky="ew", padx=(15, 5), pady=15)
+        label_font = ctk.CTkFont(size=11)
 
-        self.price_entry = ctk.CTkEntry(form, placeholder_text="Price")
-        self.price_entry.grid(row=0, column=1, sticky="ew", padx=5, pady=15)
+        ctk.CTkLabel(form, text="Product Name", font=label_font, text_color="gray60", anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=(15, 5), pady=(15, 2)
+        )
+        ctk.CTkLabel(form, text="Price", font=label_font, text_color="gray60", anchor="w").grid(
+            row=0, column=1, sticky="ew", padx=5, pady=(15, 2)
+        )
+        ctk.CTkLabel(form, text="Quantity", font=label_font, text_color="gray60", anchor="w").grid(
+            row=0, column=2, sticky="ew", padx=5, pady=(15, 2)
+        )
 
-        self.qty_entry = ctk.CTkEntry(form, placeholder_text="Quantity")
-        self.qty_entry.grid(row=0, column=2, sticky="ew", padx=5, pady=15)
+        self.name_entry = ctk.CTkEntry(form, placeholder_text="e.g. Widget A")
+        self.name_entry.grid(row=1, column=0, sticky="ew", padx=(15, 5), pady=(0, 15))
+
+        self.price_entry = ctk.CTkEntry(form, placeholder_text="0.00")
+        self.price_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=(0, 15))
+
+        self.qty_entry = ctk.CTkEntry(form, placeholder_text="1")
+        self.qty_entry.grid(row=1, column=2, sticky="ew", padx=5, pady=(0, 15))
 
         self._setup_field_navigation([self.name_entry, self.price_entry, self.qty_entry])
 
@@ -150,7 +162,7 @@ class BillingApp(ctk.CTk):
             form, text="+ Add Item", fg_color=GOLD, hover_color=GOLD_HOVER, text_color="black",
             width=120, command=self._on_add_or_update
         )
-        self.add_button.grid(row=0, column=3, padx=(5, 10), pady=15)
+        self.add_button.grid(row=0, column=3, rowspan=2, padx=(5, 10), pady=15, sticky="ns")
 
         self.cancel_edit_button = ctk.CTkButton(
             form, text="Cancel", width=80, fg_color="gray40", hover_color="gray30",
@@ -207,21 +219,29 @@ class BillingApp(ctk.CTk):
         bottom.grid(row=3, column=0, sticky="ew")
         bottom.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
-        ctk.CTkLabel(bottom, text="Discount (e.g. 5 or 10%)").grid(row=0, column=0, sticky="w", padx=(15, 5), pady=(15, 5))
-        ctk.CTkLabel(bottom, text="Tax %").grid(row=0, column=1, sticky="w", padx=5, pady=(15, 5))
-        ctk.CTkLabel(bottom, text="Delivery Charge").grid(row=0, column=2, sticky="w", padx=5, pady=(15, 5))
-        ctk.CTkLabel(bottom, text="Payment Method").grid(row=0, column=3, sticky="w", padx=(5, 15), pady=(15, 5))
+        ctk.CTkLabel(bottom, text="Discount", font=label_font, text_color="gray60", anchor="w").grid(
+            row=0, column=0, sticky="ew", padx=(15, 5), pady=(15, 2)
+        )
+        ctk.CTkLabel(bottom, text="Tax %", font=label_font, text_color="gray60", anchor="w").grid(
+            row=0, column=1, sticky="ew", padx=5, pady=(15, 2)
+        )
+        ctk.CTkLabel(bottom, text="Delivery Charge", font=label_font, text_color="gray60", anchor="w").grid(
+            row=0, column=2, sticky="ew", padx=5, pady=(15, 2)
+        )
+        ctk.CTkLabel(bottom, text="Payment Method", font=label_font, text_color="gray60", anchor="w").grid(
+            row=0, column=3, sticky="ew", padx=(5, 15), pady=(15, 2)
+        )
 
-        self.discount_entry = ctk.CTkEntry(bottom, placeholder_text="0")
-        self.discount_entry.grid(row=1, column=0, sticky="ew", padx=(15, 5))
+        self.discount_entry = ctk.CTkEntry(bottom, placeholder_text="e.g. 5 or 10%")
+        self.discount_entry.grid(row=1, column=0, sticky="ew", padx=(15, 5), pady=(0, 15))
         self.discount_entry.bind("<KeyRelease>", lambda e: self._refresh_totals())
 
         self.tax_entry = ctk.CTkEntry(bottom, placeholder_text="0")
-        self.tax_entry.grid(row=1, column=1, sticky="ew", padx=5)
+        self.tax_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=(0, 15))
         self.tax_entry.bind("<KeyRelease>", lambda e: self._refresh_totals())
 
         self.delivery_entry = ctk.CTkEntry(bottom, placeholder_text="0")
-        self.delivery_entry.grid(row=1, column=2, sticky="ew", padx=5)
+        self.delivery_entry.grid(row=1, column=2, sticky="ew", padx=5, pady=(0, 15))
         self.delivery_entry.bind("<KeyRelease>", lambda e: self._refresh_totals())
 
         self._setup_field_navigation([self.discount_entry, self.tax_entry, self.delivery_entry])
@@ -232,7 +252,7 @@ class BillingApp(ctk.CTk):
 
         self.payment_var = ctk.StringVar(value=core.PAYMENT_METHODS[0])
         payment_menu = ctk.CTkOptionMenu(bottom, values=core.PAYMENT_METHODS, variable=self.payment_var)
-        payment_menu.grid(row=1, column=3, sticky="ew", padx=(5, 15))
+        payment_menu.grid(row=1, column=3, sticky="ew", padx=(5, 15), pady=(0, 15))
 
         totals_frame = ctk.CTkFrame(bottom, fg_color="transparent")
         totals_frame.grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=(15, 0))
@@ -585,7 +605,7 @@ class BillingApp(ctk.CTk):
 
         self.editing_index = index
         self.add_button.configure(text=f"Update Item ({pretty_key(self.keybindings['add_item'])})")
-        self.cancel_edit_button.grid(row=0, column=4, padx=(0, 10), pady=15)
+        self.cancel_edit_button.grid(row=0, column=4, rowspan=2, padx=(0, 10), pady=15, sticky="ns")
 
     def _cancel_edit(self, clear_form=True):
         self.editing_index = None
