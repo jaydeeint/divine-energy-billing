@@ -14,7 +14,7 @@ else:
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
 
 OUTPUT_DIR = os.path.join(APP_DIR, "bills")
-LOGO_PATH = os.path.join(APP_DIR, "assets", "logo.png")
+ASSETS_DIR = os.path.join(APP_DIR, "assets")
 EXCEL_PATH = os.path.join(APP_DIR, "transactions.xlsx")
 EXCEL_HEADERS = ["Date", "Bill", "Product", "Quantity", "Price", "Subtotal", "Delivery Charge", "Grand Total"]
 
@@ -22,9 +22,19 @@ PAGE_WIDTH = 80
 MARGIN = 4
 USABLE_WIDTH = PAGE_WIDTH - (2 * MARGIN)
 
+LOGO_EXTENSIONS = (".png", ".jpg", ".jpeg", ".bmp", ".gif")
+
+
+def find_logo_path():
+    for ext in LOGO_EXTENSIONS:
+        candidate = os.path.join(ASSETS_DIR, f"logo{ext}")
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
 
 def estimate_page_height(items):
-    header_height = 46 if os.path.exists(LOGO_PATH) else 20
+    header_height = 46 if find_logo_path() else 20
     items_height = len(items) * 11
     footer_height = 30
     safety_buffer = 20
@@ -33,9 +43,10 @@ def estimate_page_height(items):
 
 class BillPDF(FPDF):
     def header(self):
-        if os.path.exists(LOGO_PATH):
+        logo_path = find_logo_path()
+        if logo_path:
             logo_w = 24
-            self.image(LOGO_PATH, x=(self.w - logo_w) / 2, y=4, w=logo_w)
+            self.image(logo_path, x=(self.w - logo_w) / 2, y=4, w=logo_w)
             self.set_y(4 + logo_w + 2)
         self.set_font("Helvetica", "B", 12)
         self.cell(0, 6, "RECEIPT", align="C", new_x="LMARGIN", new_y="NEXT")

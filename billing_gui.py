@@ -47,7 +47,7 @@ def style_treeview():
 class BillingApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Divine Energy - Bill Generator")
+        self.title("Point of Sale")
         self.geometry("980x680")
         self.minsize(860, 600)
 
@@ -73,8 +73,9 @@ class BillingApp(ctk.CTk):
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=20, pady=(20, 10))
 
-        if os.path.exists(core.LOGO_PATH):
-            img = Image.open(core.LOGO_PATH)
+        logo_path = core.find_logo_path()
+        if logo_path:
+            img = Image.open(logo_path)
             logo_img = ctk.CTkImage(light_image=img, dark_image=img, size=(48, 48))
             logo_label = ctk.CTkLabel(header, image=logo_img, text="")
             logo_label.pack(side="left", padx=(0, 12))
@@ -82,11 +83,13 @@ class BillingApp(ctk.CTk):
         title_frame = ctk.CTkFrame(header, fg_color="transparent")
         title_frame.pack(side="left")
         ctk.CTkLabel(
-            title_frame, text="Divine Energy", font=ctk.CTkFont(size=22, weight="bold"), text_color=GOLD
+            title_frame, text="Point of Sale", font=ctk.CTkFont(size=22, weight="bold"), text_color=GOLD
         ).pack(anchor="w")
-        ctk.CTkLabel(
-            title_frame, text="Bill Generator", font=ctk.CTkFont(size=13), text_color="gray60"
-        ).pack(anchor="w")
+        if not logo_path:
+            ctk.CTkLabel(
+                title_frame, text="Tip: add a logo.png/.jpg to the assets folder to brand your receipts",
+                font=ctk.CTkFont(size=11), text_color="gray60"
+            ).pack(anchor="w")
 
     # ---------- New Bill tab ----------
 

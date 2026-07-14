@@ -1,10 +1,14 @@
-# Divine Energy - Bill Generator
+# Point of Sale
 
-A desktop app that generates itemized PDF receipts sized for an 80mm thermal receipt printer, and logs every transaction to `transactions.xlsx`.
+A desktop point-of-sale app that generates itemized PDF receipts sized for an 80mm thermal receipt printer, and logs every transaction to `transactions.xlsx`.
 
 ## Option 1: Just run the app (no install needed)
 
 Download the zip from the [Releases](../../releases) page, unzip it, and run `BillGenerator.exe`. Keep the `assets` folder next to it.
+
+## Branding it as your own
+
+Drop a `logo.png` (or `.jpg`/`.jpeg`/`.bmp`/`.gif`) into the `assets` folder and it will automatically show up in the app and print at the top of every receipt. No logo file is required — the app works fine without one.
 
 ## Option 2: Run from source
 
