@@ -27,7 +27,7 @@ def get_items():
     items = []
     print("Enter items for the bill. Type 'reset' as the product names to clear all items and start over.\n")
     while True:
-        names_raw = input("Product names (separated by -): ").strip()
+        names_raw = input("Product names (separated by ,): ").strip()
         if names_raw.lower() == "reset":
             if items:
                 confirm_reset = input(f"Clear all {len(items)} item(s) entered so far? (y/n): ").strip().lower()
@@ -40,12 +40,12 @@ def get_items():
                 print("No items to reset.\n")
             continue
 
-        prices_raw = input("Prices (separated by -): ").strip()
-        quantities_raw = input("Quantities (separated by -): ").strip()
+        prices_raw = input("Prices (separated by ,): ").strip()
+        quantities_raw = input("Quantities (separated by ,): ").strip()
 
-        names = [n.strip() for n in names_raw.split("-") if n.strip()]
-        price_tokens = [p.strip() for p in prices_raw.split("-") if p.strip()]
-        quantity_tokens = [q.strip() for q in quantities_raw.split("-") if q.strip()]
+        names = [n.strip() for n in names_raw.split(",") if n.strip()]
+        price_tokens = [p.strip() for p in prices_raw.split(",") if p.strip()]
+        quantity_tokens = [q.strip() for q in quantities_raw.split(",") if q.strip()]
 
         if not names or not (len(names) == len(price_tokens) == len(quantity_tokens)):
             print(
@@ -193,7 +193,43 @@ def log_transaction(items, delivery_charge, grand_total, bill_name):
     workbook.save(EXCEL_PATH)
 
 
-def main():
+def show_sales_summary():
+    if not os.path.exists(EXCEL_PATH):
+        print("No transactions recorded yet.")
+        return
+
+    workbook = openpyxl.load_workbook(EXCEL_PATH)
+    sheet = workbook.active
+
+    bills = {}
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        bill_date, bill_name, _product, _qty, _price, _subtotal, _delivery, grand_total = row
+        if bill_name not in bills:
+            bills[bill_name] = (bill_date, grand_total)
+
+    if not bills:
+        print("No transactions recorded yet.")
+        return
+
+    today = date.today().isoformat()
+    this_month = date.today().strftime("%Y-%m")
+
+    def totals_for(predicate):
+        matching = [gt for d, gt in bills.values() if predicate(d)]
+        return len(matching), sum(matching)
+
+    today_count, today_total = totals_for(lambda d: d == today)
+    month_count, month_total = totals_for(lambda d: d.startswith(this_month))
+    all_count, all_total = totals_for(lambda d: True)
+
+    print("\n--- Sales Summary ---")
+    print(f"Today ({today}): {today_count} bill(s), Total: {today_total:.2f}")
+    print(f"This Month ({this_month}): {month_count} bill(s), Total: {month_total:.2f}")
+    print(f"All Time: {all_count} bill(s), Total: {all_total:.2f}")
+    print("---------------------\n")
+
+
+def generate_bill():
     items = get_items()
     if not items:
         print("No items entered. Nothing to print.")
@@ -211,6 +247,18 @@ def main():
     print(f"\nBill saved to: {output_path}")
     print(f"Transaction logged to: {EXCEL_PATH}")
     print(f"Grand Total: {grand_total:.2f}")
+
+
+def main():
+    print("1. Generate a new bill")
+    print("2. View sales summary")
+    choice = input("Choose an option (1/2): ").strip()
+
+    if choice == "2":
+        show_sales_summary()
+        return
+
+    generate_bill()
 
 
 if __name__ == "__main__":
