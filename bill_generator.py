@@ -133,6 +133,33 @@ def void_a_bill():
         print("Bill not found.")
 
 
+def delete_a_bill():
+    recent = core.get_transactions_list(limit=15)
+    if not recent:
+        print("No transactions recorded yet.")
+        return
+
+    print("\nRecent bills:")
+    for t in recent:
+        status = " (voided)" if t["voided"] else ""
+        print(f"  {t['bill']}  |  {t['date']}  |  Total: {t['grand_total']:.2f}{status}")
+
+    bill_name = input("\nEnter the exact bill filename to permanently delete (blank to cancel): ").strip()
+    if not bill_name:
+        return
+    confirm = input(
+        f"Permanently delete '{bill_name}'? This removes it from transactions.xlsx and deletes its PDF. "
+        "This cannot be undone. (y/n): "
+    ).strip().lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+    if core.delete_bill(bill_name):
+        print(f"Deleted: {bill_name}")
+    else:
+        print("Bill not found.")
+
+
 def make_bill():
     items = get_items()
     if not items:
@@ -156,13 +183,17 @@ def main():
     print("1. Generate a new bill")
     print("2. View sales summary")
     print("3. Void a bill")
-    choice = input("Choose an option (1/2/3): ").strip()
+    print("4. Delete a bill")
+    choice = input("Choose an option (1/2/3/4): ").strip()
 
     if choice == "2":
         show_sales_summary()
         return
     if choice == "3":
         void_a_bill()
+        return
+    if choice == "4":
+        delete_a_bill()
         return
 
     make_bill()

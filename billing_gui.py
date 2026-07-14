@@ -335,6 +335,10 @@ class BillingApp(ctk.CTk):
         ctk.CTkButton(
             actions, text="Void Selected Bill", width=160, fg_color=RED, hover_color=RED_HOVER,
             command=self._void_selected
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            actions, text="Delete Selected Bill", width=170, fg_color="#7A1712", hover_color="#5C110D",
+            command=self._delete_selected_bill
         ).pack(side="left")
 
     def _on_tab_change(self):
@@ -481,6 +485,24 @@ class BillingApp(ctk.CTk):
             self._refresh_summary()
         else:
             messagebox.showerror("Void Bill", "Could not find that bill.")
+
+    def _delete_selected_bill(self):
+        selection = self.tx_tree.selection()
+        if not selection:
+            messagebox.showinfo("Delete Bill", "Select a bill in the list first.")
+            return
+        bill_name = selection[0]
+        if not messagebox.askyesno(
+            "Delete Bill",
+            f"Permanently delete this bill?\n\n{bill_name}\n\n"
+            "This removes it from transactions.xlsx and deletes its PDF. This cannot be undone.",
+            icon="warning",
+        ):
+            return
+        if core.delete_bill(bill_name):
+            self._refresh_summary()
+        else:
+            messagebox.showerror("Delete Bill", "Could not find that bill.")
 
     # ---------- Settings tab ----------
 

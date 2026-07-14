@@ -326,6 +326,41 @@ def void_bill(bill_name):
     return found
 
 
+def delete_bill(bill_name):
+    rows_deleted = False
+
+    if os.path.exists(EXCEL_PATH):
+        workbook = openpyxl.load_workbook(EXCEL_PATH)
+        sheet = workbook.active
+        _migrate_headers(sheet)
+        header = [cell.value for cell in next(sheet.iter_rows(min_row=1, max_row=1))]
+
+        try:
+            bill_col = header.index("Bill") + 1
+        except ValueError:
+            bill_col = None
+
+        if bill_col:
+            matching_rows = [
+                row_idx for row_idx in range(2, sheet.max_row + 1)
+                if sheet.cell(row=row_idx, column=bill_col).value == bill_name
+            ]
+            # delete bottom-up so earlier row indices stay valid as later rows shift up
+            for row_idx in reversed(matching_rows):
+                sheet.delete_rows(row_idx)
+            if matching_rows:
+                rows_deleted = True
+                workbook.save(EXCEL_PATH)
+
+    pdf_path = os.path.join(OUTPUT_DIR, bill_name)
+    file_deleted = False
+    if os.path.exists(pdf_path):
+        os.remove(pdf_path)
+        file_deleted = True
+
+    return rows_deleted or file_deleted
+
+
 def get_transactions_list(limit=25):
     rows = _read_rows()
     bills = {}
