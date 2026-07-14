@@ -59,13 +59,39 @@ def get_items():
     return items
 
 
-def get_delivery_charge():
+def get_number(prompt, default="0"):
     while True:
-        raw = input("Delivery charge (0 for none): ").strip() or "0"
+        raw = input(prompt).strip() or default
         try:
             return float(raw)
         except ValueError:
-            print("Delivery charge must be a number. Try again.")
+            print("Must be a number. Try again.")
+
+
+def get_discount():
+    while True:
+        raw = input("Discount - flat amount or percent, e.g. 5 or 10% (blank for none): ").strip()
+        try:
+            core.parse_discount(raw, 1.0)
+        except ValueError as e:
+            print(str(e))
+            continue
+        return raw
+
+
+def get_payment_method():
+    options = core.PAYMENT_METHODS
+    print("Payment method: " + ", ".join(f"{i + 1}. {m}" for i, m in enumerate(options)))
+    raw = input(f"Choose (1-{len(options)}, blank for {options[0]}): ").strip()
+    if not raw:
+        return options[0]
+    try:
+        index = int(raw) - 1
+        if 0 <= index < len(options):
+            return options[index]
+    except ValueError:
+        pass
+    return options[0]
 
 
 def show_sales_summary():
@@ -77,12 +103,34 @@ def show_sales_summary():
     today = summary["today"]
     month = summary["month"]
     all_time = summary["all_time"]
+    voided = summary["voided"]
 
     print("\n--- Sales Summary ---")
     print(f"Today ({today['date']}): {today['count']} bill(s), Total: {today['total']:.2f}")
     print(f"This Month ({month['label']}): {month['count']} bill(s), Total: {month['total']:.2f}")
     print(f"All Time: {all_time['count']} bill(s), Total: {all_time['total']:.2f}")
+    print(f"Voided: {voided['count']} bill(s), Total: {voided['total']:.2f}")
     print("---------------------\n")
+
+
+def void_a_bill():
+    recent = core.get_transactions_list(limit=15)
+    if not recent:
+        print("No transactions recorded yet.")
+        return
+
+    print("\nRecent bills:")
+    for t in recent:
+        status = " (already voided)" if t["voided"] else ""
+        print(f"  {t['bill']}  |  {t['date']}  |  Total: {t['grand_total']:.2f}{status}")
+
+    bill_name = input("\nEnter the exact bill filename to void (blank to cancel): ").strip()
+    if not bill_name:
+        return
+    if core.void_bill(bill_name):
+        print(f"Voided: {bill_name}")
+    else:
+        print("Bill not found.")
 
 
 def make_bill():
@@ -91,21 +139,30 @@ def make_bill():
         print("No items entered. Nothing to print.")
         return
 
-    delivery_charge = get_delivery_charge()
-    output_path, grand_total = core.generate_bill(items, delivery_charge)
+    discount_raw = get_discount()
+    tax_rate = get_number("Tax percent (blank for none): ")
+    delivery_charge = get_number("Delivery charge (0 for none): ")
+    payment_method = get_payment_method()
+
+    output_path, totals, invoice_number = core.generate_bill(items, discount_raw, tax_rate, delivery_charge, payment_method)
 
     print(f"\nBill saved to: {output_path}")
+    print(f"Invoice #: {invoice_number:06d}")
     print(f"Transaction logged to: {core.EXCEL_PATH}")
-    print(f"Grand Total: {grand_total:.2f}")
+    print(f"Grand Total: {totals['grand_total']:.2f}")
 
 
 def main():
     print("1. Generate a new bill")
     print("2. View sales summary")
-    choice = input("Choose an option (1/2): ").strip()
+    print("3. Void a bill")
+    choice = input("Choose an option (1/2/3): ").strip()
 
     if choice == "2":
         show_sales_summary()
+        return
+    if choice == "3":
+        void_a_bill()
         return
 
     make_bill()

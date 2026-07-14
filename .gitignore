@@ -7,3 +7,5 @@ bills/
 transactions.xlsx
 release_package/
 *.zip
+invoice_counter.txt
+assets/business_info.json

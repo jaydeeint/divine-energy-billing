@@ -1,5 +1,4 @@
 import os
-import tkinter as tk
 from tkinter import messagebox, ttk
 
 import customtkinter as ctk
@@ -11,6 +10,8 @@ GOLD = "#C9A227"
 GOLD_HOVER = "#B08D1B"
 RED = "#B3261E"
 RED_HOVER = "#8C1D17"
+GREEN = "#2E7D32"
+GREEN_HOVER = "#245F27"
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("dark-blue")
@@ -48,8 +49,8 @@ class BillingApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Point of Sale")
-        self.geometry("980x680")
-        self.minsize(860, 600)
+        self.geometry("1040x760")
+        self.minsize(900, 640)
 
         self.items = []
         self.editing_index = None
@@ -61,9 +62,11 @@ class BillingApp(ctk.CTk):
         self.tabs.pack(fill="both", expand=True, padx=20, pady=(0, 20))
         self.tabs.add("New Bill")
         self.tabs.add("Sales Summary")
+        self.tabs.add("Settings")
 
         self._build_new_bill_tab(self.tabs.tab("New Bill"))
         self._build_summary_tab(self.tabs.tab("Sales Summary"))
+        self._build_settings_tab(self.tabs.tab("Settings"))
 
         self.tabs.configure(command=self._on_tab_change)
 
@@ -165,50 +168,101 @@ class BillingApp(ctk.CTk):
             command=self._clear_all
         ).pack(side="left")
 
-        # Delivery + totals + generate
+        # Discount / tax / delivery / payment + totals + generate
         bottom = ctk.CTkFrame(parent, corner_radius=10)
         bottom.grid(row=3, column=0, sticky="ew")
-        bottom.grid_columnconfigure(1, weight=1)
+        bottom.grid_columnconfigure((0, 1, 2, 3), weight=1)
 
-        ctk.CTkLabel(bottom, text="Delivery Charge:").grid(row=0, column=0, sticky="w", padx=15, pady=(15, 5))
+        ctk.CTkLabel(bottom, text="Discount (e.g. 5 or 10%)").grid(row=0, column=0, sticky="w", padx=(15, 5), pady=(15, 5))
+        ctk.CTkLabel(bottom, text="Tax %").grid(row=0, column=1, sticky="w", padx=5, pady=(15, 5))
+        ctk.CTkLabel(bottom, text="Delivery Charge").grid(row=0, column=2, sticky="w", padx=5, pady=(15, 5))
+        ctk.CTkLabel(bottom, text="Payment Method").grid(row=0, column=3, sticky="w", padx=(5, 15), pady=(15, 5))
+
+        self.discount_entry = ctk.CTkEntry(bottom, placeholder_text="0")
+        self.discount_entry.grid(row=1, column=0, sticky="ew", padx=(15, 5))
+        self.discount_entry.bind("<KeyRelease>", lambda e: self._refresh_totals())
+
+        self.tax_entry = ctk.CTkEntry(bottom, placeholder_text="0")
+        self.tax_entry.grid(row=1, column=1, sticky="ew", padx=5)
+        self.tax_entry.bind("<KeyRelease>", lambda e: self._refresh_totals())
+
         self.delivery_entry = ctk.CTkEntry(bottom, placeholder_text="0")
-        self.delivery_entry.grid(row=0, column=1, sticky="w", pady=(15, 5))
+        self.delivery_entry.grid(row=1, column=2, sticky="ew", padx=5)
         self.delivery_entry.bind("<KeyRelease>", lambda e: self._refresh_totals())
 
-        self.items_total_label = ctk.CTkLabel(bottom, text="Items Total: 0.00", anchor="e")
-        self.items_total_label.grid(row=1, column=0, columnspan=2, sticky="e", padx=15)
+        self.payment_var = ctk.StringVar(value=core.PAYMENT_METHODS[0])
+        payment_menu = ctk.CTkOptionMenu(bottom, values=core.PAYMENT_METHODS, variable=self.payment_var)
+        payment_menu.grid(row=1, column=3, sticky="ew", padx=(5, 15))
+
+        totals_frame = ctk.CTkFrame(bottom, fg_color="transparent")
+        totals_frame.grid(row=2, column=0, columnspan=4, sticky="ew", padx=15, pady=(15, 0))
+        totals_frame.grid_columnconfigure(0, weight=1)
+
+        self.items_total_label = ctk.CTkLabel(totals_frame, text="Items Total: 0.00", anchor="e")
+        self.items_total_label.grid(row=0, column=0, sticky="e")
+        self.discount_label = ctk.CTkLabel(totals_frame, text="", anchor="e")
+        self.discount_label.grid(row=1, column=0, sticky="e")
+        self.tax_label = ctk.CTkLabel(totals_frame, text="", anchor="e")
+        self.tax_label.grid(row=2, column=0, sticky="e")
 
         self.grand_total_label = ctk.CTkLabel(
             bottom, text="Grand Total: 0.00", font=ctk.CTkFont(size=18, weight="bold"), text_color=GOLD, anchor="e"
         )
-        self.grand_total_label.grid(row=2, column=0, columnspan=2, sticky="e", padx=15, pady=(0, 10))
+        self.grand_total_label.grid(row=3, column=0, columnspan=4, sticky="e", padx=15, pady=(5, 10))
 
         self.generate_button = ctk.CTkButton(
             bottom, text="Generate Bill", height=44, font=ctk.CTkFont(size=15, weight="bold"),
             fg_color=GOLD, hover_color=GOLD_HOVER, text_color="black", command=self._on_generate
         )
-        self.generate_button.grid(row=3, column=0, columnspan=2, sticky="ew", padx=15, pady=(0, 15))
+        self.generate_button.grid(row=4, column=0, columnspan=4, sticky="ew", padx=15, pady=(0, 15))
 
     # ---------- Sales Summary tab ----------
 
     def _build_summary_tab(self, parent):
-        parent.grid_columnconfigure((0, 1, 2), weight=1)
+        parent.grid_columnconfigure((0, 1, 2, 3), weight=1)
+        parent.grid_rowconfigure(1, weight=1)
 
         self.summary_cards = {}
-        for i, key in enumerate(("today", "month", "all_time")):
+        for i, key in enumerate(("today", "month", "all_time", "voided")):
             card = ctk.CTkFrame(parent, corner_radius=10)
             card.grid(row=0, column=i, sticky="nsew", padx=10, pady=15)
             title = ctk.CTkLabel(card, text="", font=ctk.CTkFont(size=13), text_color="gray60")
             title.pack(pady=(15, 0))
-            total = ctk.CTkLabel(card, text="0.00", font=ctk.CTkFont(size=26, weight="bold"), text_color=GOLD)
+            color = RED if key == "voided" else GOLD
+            total = ctk.CTkLabel(card, text="0.00", font=ctk.CTkFont(size=24, weight="bold"), text_color=color)
             total.pack(pady=(5, 0))
             count = ctk.CTkLabel(card, text="0 bills", font=ctk.CTkFont(size=12), text_color="gray60")
             count.pack(pady=(0, 15))
             self.summary_cards[key] = (title, total, count)
 
-        ctk.CTkButton(parent, text="Refresh", width=100, command=self._refresh_summary).grid(
-            row=1, column=0, sticky="w", padx=10
+        list_frame = ctk.CTkFrame(parent, corner_radius=10)
+        list_frame.grid(row=1, column=0, columnspan=4, sticky="nsew", padx=10, pady=(0, 10))
+        list_frame.grid_columnconfigure(0, weight=1)
+        list_frame.grid_rowconfigure(0, weight=1)
+
+        columns = ("date", "bill", "invoice", "total", "status")
+        self.tx_tree = ttk.Treeview(
+            list_frame, columns=columns, show="headings", style="Bill.Treeview", selectmode="browse"
         )
+        for col, label, width in (
+            ("date", "Date", 100), ("bill", "Bill", 260), ("invoice", "Invoice #", 90),
+            ("total", "Grand Total", 110), ("status", "Status", 100),
+        ):
+            self.tx_tree.heading(col, text=label)
+            self.tx_tree.column(col, width=width, anchor="w" if col == "bill" else "center")
+        self.tx_tree.grid(row=0, column=0, sticky="nsew", padx=(15, 0), pady=15)
+
+        tx_scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.tx_tree.yview)
+        self.tx_tree.configure(yscrollcommand=tx_scrollbar.set)
+        tx_scrollbar.grid(row=0, column=1, sticky="ns", pady=15, padx=(0, 15))
+
+        actions = ctk.CTkFrame(parent, fg_color="transparent")
+        actions.grid(row=2, column=0, columnspan=4, sticky="ew", padx=10, pady=(0, 15))
+        ctk.CTkButton(actions, text="Refresh", width=100, command=self._refresh_summary).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            actions, text="Void Selected Bill", width=160, fg_color=RED, hover_color=RED_HOVER,
+            command=self._void_selected
+        ).pack(side="left")
 
     def _on_tab_change(self):
         if self.tabs.get() == "Sales Summary":
@@ -216,29 +270,102 @@ class BillingApp(ctk.CTk):
 
     def _refresh_summary(self):
         summary = core.get_sales_summary()
+
         if summary is None:
             for title, total, count in self.summary_cards.values():
                 title.configure(text="No data")
                 total.configure(text="0.00")
                 count.configure(text="0 bills")
+        else:
+            today, month, all_time, voided = summary["today"], summary["month"], summary["all_time"], summary["voided"]
+
+            t_title, t_total, t_count = self.summary_cards["today"]
+            t_title.configure(text=f"Today ({today['date']})")
+            t_total.configure(text=f"{today['total']:.2f}")
+            t_count.configure(text=f"{today['count']} bill(s)")
+
+            m_title, m_total, m_count = self.summary_cards["month"]
+            m_title.configure(text=f"This Month ({month['label']})")
+            m_total.configure(text=f"{month['total']:.2f}")
+            m_count.configure(text=f"{month['count']} bill(s)")
+
+            a_title, a_total, a_count = self.summary_cards["all_time"]
+            a_title.configure(text="All Time")
+            a_total.configure(text=f"{all_time['total']:.2f}")
+            a_count.configure(text=f"{all_time['count']} bill(s)")
+
+            v_title, v_total, v_count = self.summary_cards["voided"]
+            v_title.configure(text="Voided")
+            v_total.configure(text=f"{voided['total']:.2f}")
+            v_count.configure(text=f"{voided['count']} bill(s)")
+
+        self.tx_tree.delete(*self.tx_tree.get_children())
+        for tx in core.get_transactions_list(limit=50):
+            invoice = f"{tx['invoice_number']:06d}" if tx["invoice_number"] else "-"
+            self.tx_tree.insert(
+                "", "end", iid=tx["bill"],
+                values=(tx["date"], tx["bill"], invoice, f"{tx['grand_total']:.2f}", "VOIDED" if tx["voided"] else "Active")
+            )
+
+    def _void_selected(self):
+        selection = self.tx_tree.selection()
+        if not selection:
+            messagebox.showinfo("Void Bill", "Select a bill in the list first.")
             return
+        bill_name = selection[0]
+        if not messagebox.askyesno("Void Bill", f"Void this bill?\n\n{bill_name}\n\nThis excludes it from revenue totals."):
+            return
+        if core.void_bill(bill_name):
+            self._refresh_summary()
+        else:
+            messagebox.showerror("Void Bill", "Could not find that bill.")
 
-        today, month, all_time = summary["today"], summary["month"], summary["all_time"]
+    # ---------- Settings tab ----------
 
-        t_title, t_total, t_count = self.summary_cards["today"]
-        t_title.configure(text=f"Today ({today['date']})")
-        t_total.configure(text=f"{today['total']:.2f}")
-        t_count.configure(text=f"{today['count']} bill(s)")
+    def _build_settings_tab(self, parent):
+        parent.grid_columnconfigure(0, weight=1)
 
-        m_title, m_total, m_count = self.summary_cards["month"]
-        m_title.configure(text=f"This Month ({month['label']})")
-        m_total.configure(text=f"{month['total']:.2f}")
-        m_count.configure(text=f"{month['count']} bill(s)")
+        card = ctk.CTkFrame(parent, corner_radius=10)
+        card.grid(row=0, column=0, sticky="ew", padx=10, pady=20)
+        card.grid_columnconfigure(1, weight=1)
 
-        a_title, a_total, a_count = self.summary_cards["all_time"]
-        a_title.configure(text="All Time")
-        a_total.configure(text=f"{all_time['total']:.2f}")
-        a_count.configure(text=f"{all_time['count']} bill(s)")
+        ctk.CTkLabel(
+            card, text="Business Info (printed on every receipt, under the logo)",
+            font=ctk.CTkFont(size=14, weight="bold"), text_color=GOLD
+        ).grid(row=0, column=0, columnspan=2, sticky="w", padx=15, pady=(15, 10))
+
+        info = core.get_business_info()
+
+        ctk.CTkLabel(card, text="Business Name").grid(row=1, column=0, sticky="w", padx=15, pady=8)
+        self.biz_name_entry = ctk.CTkEntry(card)
+        self.biz_name_entry.insert(0, info["name"])
+        self.biz_name_entry.grid(row=1, column=1, sticky="ew", padx=(0, 15), pady=8)
+
+        ctk.CTkLabel(card, text="Address").grid(row=2, column=0, sticky="w", padx=15, pady=8)
+        self.biz_address_entry = ctk.CTkEntry(card)
+        self.biz_address_entry.insert(0, info["address"])
+        self.biz_address_entry.grid(row=2, column=1, sticky="ew", padx=(0, 15), pady=8)
+
+        ctk.CTkLabel(card, text="Phone").grid(row=3, column=0, sticky="w", padx=15, pady=8)
+        self.biz_phone_entry = ctk.CTkEntry(card)
+        self.biz_phone_entry.insert(0, info["phone"])
+        self.biz_phone_entry.grid(row=3, column=1, sticky="ew", padx=(0, 15), pady=8)
+
+        self.settings_status = ctk.CTkLabel(card, text="", text_color=GREEN)
+        self.settings_status.grid(row=4, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 5))
+
+        ctk.CTkButton(
+            card, text="Save", width=100, fg_color=GOLD, hover_color=GOLD_HOVER, text_color="black",
+            command=self._save_settings
+        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
+
+    def _save_settings(self):
+        core.save_business_info({
+            "name": self.biz_name_entry.get(),
+            "address": self.biz_address_entry.get(),
+            "phone": self.biz_phone_entry.get(),
+        })
+        self.settings_status.configure(text="Saved.")
 
     # ---------- Item form logic ----------
 
@@ -348,30 +475,70 @@ class BillingApp(ctk.CTk):
         except ValueError:
             return 0.0
 
+    def _get_tax_rate(self):
+        raw = self.tax_entry.get().strip() or "0"
+        try:
+            return float(raw)
+        except ValueError:
+            return 0.0
+
+    def _get_discount_raw(self):
+        return self.discount_entry.get().strip()
+
     def _refresh_totals(self):
-        items_total = sum(item["price"] * item["quantity"] for item in self.items)
-        delivery = self._get_delivery_charge()
-        grand_total = items_total + delivery
-        self.items_total_label.configure(text=f"Items Total: {items_total:.2f}")
-        self.grand_total_label.configure(text=f"Grand Total: {grand_total:.2f}")
+        try:
+            totals = core.compute_totals(
+                self.items, self._get_discount_raw(), self._get_tax_rate(), self._get_delivery_charge()
+            )
+        except ValueError:
+            return
+
+        self.items_total_label.configure(text=f"Items Total: {totals['items_total']:.2f}")
+
+        discount = totals["discount"]
+        if discount["amount"] > 0:
+            label = f"Discount ({discount['value']:.0f}%)" if discount["is_percent"] else "Discount"
+            self.discount_label.configure(text=f"{label}: -{discount['amount']:.2f}")
+        else:
+            self.discount_label.configure(text="")
+
+        if totals["tax_rate"]:
+            self.tax_label.configure(text=f"Tax ({totals['tax_rate']:.2f}%): {totals['tax_amount']:.2f}")
+        else:
+            self.tax_label.configure(text="")
+
+        self.grand_total_label.configure(text=f"Grand Total: {totals['grand_total']:.2f}")
 
     def _on_generate(self):
         if not self.items:
             messagebox.showwarning("No Items", "Add at least one item before generating a bill.")
             return
 
-        delivery_charge = self._get_delivery_charge()
-        output_path, grand_total = core.generate_bill(self.items, delivery_charge)
+        try:
+            output_path, totals, invoice_number = core.generate_bill(
+                self.items,
+                self._get_discount_raw(),
+                self._get_tax_rate(),
+                self._get_delivery_charge(),
+                self.payment_var.get(),
+            )
+        except ValueError as e:
+            messagebox.showerror("Invalid Input", str(e))
+            return
 
         self.items = []
         self._cancel_edit()
+        self.discount_entry.delete(0, "end")
+        self.tax_entry.delete(0, "end")
         self.delivery_entry.delete(0, "end")
+        self.payment_var.set(core.PAYMENT_METHODS[0])
         self._refresh_table()
         self._refresh_totals()
 
         if messagebox.askyesno(
             "Bill Generated",
-            f"Bill saved:\n{output_path}\n\nGrand Total: {grand_total:.2f}\n\nOpen the PDF now?",
+            f"Bill saved:\nInvoice #{invoice_number:06d}\n{output_path}\n\n"
+            f"Grand Total: {totals['grand_total']:.2f}\n\nOpen the PDF now?",
         ):
             os.startfile(output_path)
 
