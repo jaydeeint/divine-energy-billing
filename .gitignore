@@ -4,3 +4,6 @@ build/
 dist/
 bills/
 *.spec
+transactions.xlsx
+release_package/
+*.zip

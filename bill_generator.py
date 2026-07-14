@@ -3,6 +3,7 @@ import sys
 from datetime import date
 
 import fitz
+import openpyxl
 from fpdf import FPDF
 
 MM_TO_PT = 72 / 25.4
@@ -14,6 +15,8 @@ else:
 
 OUTPUT_DIR = os.path.join(APP_DIR, "bills")
 LOGO_PATH = os.path.join(APP_DIR, "assets", "logo.png")
+EXCEL_PATH = os.path.join(APP_DIR, "transactions.xlsx")
+EXCEL_HEADERS = ["Date", "Bill", "Product", "Quantity", "Price", "Subtotal", "Delivery Charge", "Grand Total"]
 
 PAGE_WIDTH = 80
 MARGIN = 4
@@ -22,13 +25,10 @@ USABLE_WIDTH = PAGE_WIDTH - (2 * MARGIN)
 
 def get_items():
     items = []
-    print("Enter items for the bill. Type 'reset' as the product name to clear all items and start over.\n")
+    print("Enter items for the bill. Type 'reset' as the product names to clear all items and start over.\n")
     while True:
-        name = input("Product name: ").strip()
-        if not name:
-            print("Product name cannot be blank. Try again.\n")
-            continue
-        if name.lower() == "reset":
+        names_raw = input("Product names (separated by -): ").strip()
+        if names_raw.lower() == "reset":
             if items:
                 confirm_reset = input(f"Clear all {len(items)} item(s) entered so far? (y/n): ").strip().lower()
                 if confirm_reset == "y":
@@ -39,22 +39,41 @@ def get_items():
             else:
                 print("No items to reset.\n")
             continue
+
+        prices_raw = input("Prices (separated by -): ").strip()
+        quantities_raw = input("Quantities (separated by -): ").strip()
+
+        names = [n.strip() for n in names_raw.split("-") if n.strip()]
+        price_tokens = [p.strip() for p in prices_raw.split("-") if p.strip()]
+        quantity_tokens = [q.strip() for q in quantities_raw.split("-") if q.strip()]
+
+        if not names or not (len(names) == len(price_tokens) == len(quantity_tokens)):
+            print(
+                f"Mismatch: {len(names)} name(s), {len(price_tokens)} price(s), "
+                f"{len(quantity_tokens)} quantity(ies). Counts must match. Try again.\n"
+            )
+            continue
+
         try:
-            price = float(input("Price: ").strip())
-            quantity = int(input("Quantity: ").strip())
-            weight = float(input("Weight: ").strip() or 0)
+            prices = [float(p) for p in price_tokens]
+            quantities = [int(q) for q in quantity_tokens]
         except ValueError:
-            print("Price/weight must be numbers and quantity must be a whole number. Try again.\n")
+            print("Prices must be numbers and quantities must be whole numbers. Try again.\n")
             continue
 
-        print(f"\nConfirm: {name} x{quantity} @ {price:.2f}, Weight: {weight:.2f} kg")
-        confirm = input("Add this item? (y/n): ").strip().lower()
+        batch = [{"name": n, "price": p, "quantity": q} for n, p, q in zip(names, prices, quantities)]
+
+        print("\nConfirm these items:")
+        for item in batch:
+            subtotal = item["price"] * item["quantity"]
+            print(f"  {item['name']}: {item['quantity']} x {item['price']:.2f} = {subtotal:.2f}")
+        confirm = input("Add these items? (y/n): ").strip().lower()
         if confirm != "y":
-            print("Item discarded. Let's re-enter it.\n")
+            print("Discarded. Let's re-enter.\n")
             continue
 
-        items.append({"name": name, "price": price, "quantity": quantity, "weight": weight})
-        print(f"Added: {name} x{quantity} @ {price:.2f}\n")
+        items.extend(batch)
+        print(f"\n{len(batch)} item(s) added. Total items so far: {len(items)}\n")
 
         generate = input("Generate bill now? (y/n): ").strip().lower()
         if generate == "y":
@@ -73,7 +92,7 @@ def get_delivery_charge():
 
 def estimate_page_height(items):
     header_height = 46 if os.path.exists(LOGO_PATH) else 20
-    items_height = len(items) * 15
+    items_height = len(items) * 11
     footer_height = 30
     safety_buffer = 20
     return header_height + items_height + footer_height + safety_buffer
@@ -119,9 +138,6 @@ def build_pdf(items, delivery_charge, output_path):
         pdf.cell(USABLE_WIDTH / 2, 4, f"{item['quantity']} x {item['price']:.2f}")
         pdf.cell(USABLE_WIDTH / 2, 4, f"{subtotal:.2f}", align="R", new_x="LMARGIN", new_y="NEXT")
 
-        pdf.set_font("Helvetica", "", 7)
-        pdf.cell(USABLE_WIDTH, 4, f"Weight: {item['weight']:.2f} kg", new_x="LMARGIN", new_y="NEXT")
-
         dashed_separator(pdf)
 
     delivery_display = "None" if delivery_charge == 0 else f"{delivery_charge:.2f}"
@@ -157,6 +173,26 @@ def trim_to_content(pdf_path, page_height_mm, content_height_mm):
     doc.close()
 
 
+def log_transaction(items, delivery_charge, grand_total, bill_name):
+    if os.path.exists(EXCEL_PATH):
+        workbook = openpyxl.load_workbook(EXCEL_PATH)
+        sheet = workbook.active
+    else:
+        workbook = openpyxl.Workbook()
+        sheet = workbook.active
+        sheet.title = "Transactions"
+        sheet.append(EXCEL_HEADERS)
+
+    bill_date = date.today().isoformat()
+    for item in items:
+        subtotal = item["price"] * item["quantity"]
+        sheet.append(
+            [bill_date, bill_name, item["name"], item["quantity"], item["price"], subtotal, delivery_charge, grand_total]
+        )
+
+    workbook.save(EXCEL_PATH)
+
+
 def main():
     items = get_items()
     if not items:
@@ -170,8 +206,10 @@ def main():
     output_path = os.path.join(OUTPUT_DIR, filename)
 
     grand_total = build_pdf(items, delivery_charge, output_path)
+    log_transaction(items, delivery_charge, grand_total, filename)
 
     print(f"\nBill saved to: {output_path}")
+    print(f"Transaction logged to: {EXCEL_PATH}")
     print(f"Grand Total: {grand_total:.2f}")
 
 
