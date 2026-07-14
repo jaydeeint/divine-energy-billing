@@ -224,6 +224,12 @@ class BillingApp(ctk.CTk):
         self.delivery_entry.grid(row=1, column=2, sticky="ew", padx=5)
         self.delivery_entry.bind("<KeyRelease>", lambda e: self._refresh_totals())
 
+        self._setup_field_navigation([self.discount_entry, self.tax_entry, self.delivery_entry])
+        self._setup_row_navigation(
+            [self.name_entry, self.price_entry, self.qty_entry],
+            [self.discount_entry, self.tax_entry, self.delivery_entry],
+        )
+
         self.payment_var = ctk.StringVar(value=core.PAYMENT_METHODS[0])
         payment_menu = ctk.CTkOptionMenu(bottom, values=core.PAYMENT_METHODS, variable=self.payment_var)
         payment_menu.grid(row=1, column=3, sticky="ew", padx=(5, 15))
@@ -321,6 +327,17 @@ class BillingApp(ctk.CTk):
             return None
         target_entry.focus_set()
         target_entry.icursor(0 if to_start else "end")
+        return "break"
+
+    def _setup_row_navigation(self, top_fields, bottom_fields):
+        for top_entry, bottom_entry in zip(top_fields, bottom_fields):
+            top_entry.bind("<Down>", lambda e, target=bottom_entry: self._move_to_field(target))
+            bottom_entry.bind("<Up>", lambda e, target=top_entry: self._move_to_field(target))
+
+    @staticmethod
+    def _move_to_field(target_entry):
+        target_entry.focus_set()
+        target_entry.icursor("end")
         return "break"
 
     # ---------- Keyboard shortcuts ----------

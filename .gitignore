@@ -11,3 +11,4 @@ invoice_counter.txt
 assets/business_info.json
 keybindings.json
 release_clean/
+release_v*/
