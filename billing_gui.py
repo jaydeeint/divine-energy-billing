@@ -13,8 +13,34 @@ RED_HOVER = "#8C1D17"
 GREEN = "#2E7D32"
 GREEN_HOVER = "#245F27"
 
+ACTION_LABELS = {
+    "add_item": "Add Item",
+    "generate_bill": "Generate Bill",
+    "clear_all": "Clear All",
+}
+ACTION_ORDER = ["add_item", "generate_bill", "clear_all"]
+MODIFIER_KEYSYMS = {"Control_L", "Control_R", "Shift_L", "Shift_R", "Alt_L", "Alt_R"}
+KEY_DISPLAY_NAMES = {"Control": "Ctrl", "Return": "Enter", "Delete": "Del", "Escape": "Esc"}
+
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("dark-blue")
+
+
+def format_key_event(event):
+    parts = []
+    if event.state & 0x0004:
+        parts.append("Control")
+    if event.state & 0x0001:
+        parts.append("Shift")
+    if event.state & 0x20000 or event.state & 0x0008:
+        parts.append("Alt")
+    parts.append(event.keysym)
+    return "<" + "-".join(parts) + ">"
+
+
+def pretty_key(combo):
+    parts = combo.strip("<>").split("-")
+    return "+".join(KEY_DISPLAY_NAMES.get(p, p) for p in parts)
 
 
 def style_treeview():
@@ -54,6 +80,9 @@ class BillingApp(ctk.CTk):
 
         self.items = []
         self.editing_index = None
+        self.keybindings = core.get_keybindings()
+        self.capturing_action = None
+        self.shortcut_buttons = {}
 
         style_treeview()
         self._build_header()
@@ -67,6 +96,8 @@ class BillingApp(ctk.CTk):
         self._build_new_bill_tab(self.tabs.tab("New Bill"))
         self._build_summary_tab(self.tabs.tab("Sales Summary"))
         self._build_settings_tab(self.tabs.tab("Settings"))
+
+        self._apply_keybindings()
 
         self.tabs.configure(command=self._on_tab_change)
 
@@ -112,6 +143,8 @@ class BillingApp(ctk.CTk):
 
         self.qty_entry = ctk.CTkEntry(form, placeholder_text="Quantity")
         self.qty_entry.grid(row=0, column=2, sticky="ew", padx=5, pady=15)
+
+        self._setup_field_navigation([self.name_entry, self.price_entry, self.qty_entry])
 
         self.add_button = ctk.CTkButton(
             form, text="+ Add Item", fg_color=GOLD, hover_color=GOLD_HOVER, text_color="black",
@@ -163,10 +196,11 @@ class BillingApp(ctk.CTk):
             row_actions, text="Delete Selected", width=130, fg_color=RED, hover_color=RED_HOVER,
             command=self._delete_selected
         ).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(
+        self.clear_all_button = ctk.CTkButton(
             row_actions, text="Clear All", width=100, fg_color="gray40", hover_color="gray30",
             command=self._clear_all
-        ).pack(side="left")
+        )
+        self.clear_all_button.pack(side="left")
 
         # Discount / tax / delivery / payment + totals + generate
         bottom = ctk.CTkFrame(parent, corner_radius=10)
@@ -268,6 +302,84 @@ class BillingApp(ctk.CTk):
         if self.tabs.get() == "Sales Summary":
             self._refresh_summary()
 
+    # ---------- Field navigation ----------
+
+    def _setup_field_navigation(self, fields):
+        for i, entry in enumerate(fields):
+            prev_entry = fields[i - 1] if i > 0 else None
+            next_entry = fields[i + 1] if i < len(fields) - 1 else None
+            entry.bind("<Right>", lambda e, ne=next_entry: self._maybe_move_field(e, ne, to_start=True))
+            entry.bind("<Left>", lambda e, pe=prev_entry: self._maybe_move_field(e, pe, to_start=False))
+
+    @staticmethod
+    def _maybe_move_field(event, target_entry, to_start):
+        if target_entry is None:
+            return None
+        widget = event.widget
+        boundary = len(widget.get()) if to_start else 0
+        if widget.index("insert") != boundary:
+            return None
+        target_entry.focus_set()
+        target_entry.icursor(0 if to_start else "end")
+        return "break"
+
+    # ---------- Keyboard shortcuts ----------
+
+    def _apply_keybindings(self):
+        handlers = {
+            "add_item": lambda e: self._on_add_or_update(),
+            "generate_bill": lambda e: self._on_generate(),
+            "clear_all": lambda e: self._clear_all(),
+        }
+        for action, key in self.keybindings.items():
+            self.bind_all(key, handlers[action])
+        self._refresh_button_labels()
+
+    def _refresh_button_labels(self):
+        self.add_button.configure(text=f"+ Add Item ({pretty_key(self.keybindings['add_item'])})")
+        self.generate_button.configure(text=f"Generate Bill ({pretty_key(self.keybindings['generate_bill'])})")
+        self.clear_all_button.configure(text=f"Clear All ({pretty_key(self.keybindings['clear_all'])})")
+        for action, button in self.shortcut_buttons.items():
+            button.configure(text=pretty_key(self.keybindings[action]))
+
+    def _start_capture(self, action):
+        if self.capturing_action:
+            return
+        self.capturing_action = action
+        self.shortcut_buttons[action].configure(text="Press keys... (Esc cancels)")
+        for key in self.keybindings.values():
+            self.unbind_all(key)
+        self.bind("<KeyPress>", self._on_capture_keypress)
+
+    def _on_capture_keypress(self, event):
+        if event.keysym in MODIFIER_KEYSYMS:
+            return
+        if event.keysym == "Escape":
+            self._end_capture()
+            return
+
+        new_combo = format_key_event(event)
+        action = self.capturing_action
+        conflict = next(
+            (a for a, k in self.keybindings.items() if k == new_combo and a != action), None
+        )
+        if conflict:
+            self.settings_status.configure(
+                text=f"{pretty_key(new_combo)} is already used by {ACTION_LABELS[conflict]}. Try another key.",
+                text_color=RED,
+            )
+            return
+
+        self.keybindings[action] = new_combo
+        core.save_keybindings(self.keybindings)
+        self.settings_status.configure(text=f"{ACTION_LABELS[action]} shortcut set to {pretty_key(new_combo)}.", text_color=GREEN)
+        self._end_capture()
+
+    def _end_capture(self):
+        self.unbind("<KeyPress>")
+        self.capturing_action = None
+        self._apply_keybindings()
+
     def _refresh_summary(self):
         summary = core.get_sales_summary()
 
@@ -326,7 +438,7 @@ class BillingApp(ctk.CTk):
         parent.grid_columnconfigure(0, weight=1)
 
         card = ctk.CTkFrame(parent, corner_radius=10)
-        card.grid(row=0, column=0, sticky="ew", padx=10, pady=20)
+        card.grid(row=0, column=0, sticky="ew", padx=10, pady=(20, 10))
         card.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
@@ -351,13 +463,38 @@ class BillingApp(ctk.CTk):
         self.biz_phone_entry.insert(0, info["phone"])
         self.biz_phone_entry.grid(row=3, column=1, sticky="ew", padx=(0, 15), pady=8)
 
-        self.settings_status = ctk.CTkLabel(card, text="", text_color=GREEN)
-        self.settings_status.grid(row=4, column=0, columnspan=2, sticky="w", padx=15, pady=(0, 5))
-
         ctk.CTkButton(
             card, text="Save", width=100, fg_color=GOLD, hover_color=GOLD_HOVER, text_color="black",
             command=self._save_settings
-        ).grid(row=5, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
+        ).grid(row=4, column=0, columnspan=2, sticky="w", padx=15, pady=(5, 15))
+
+        shortcuts_card = ctk.CTkFrame(parent, corner_radius=10)
+        shortcuts_card.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
+        shortcuts_card.grid_columnconfigure(1, weight=1)
+
+        ctk.CTkLabel(
+            shortcuts_card, text="Keyboard Shortcuts",
+            font=ctk.CTkFont(size=14, weight="bold"), text_color=GOLD
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=15, pady=(15, 10))
+
+        for i, action in enumerate(ACTION_ORDER, start=1):
+            ctk.CTkLabel(shortcuts_card, text=ACTION_LABELS[action]).grid(
+                row=i, column=0, sticky="w", padx=15, pady=8
+            )
+            key_label = ctk.CTkLabel(
+                shortcuts_card, text=pretty_key(self.keybindings[action]),
+                font=ctk.CTkFont(weight="bold"), fg_color=("gray85", "gray25"), corner_radius=6, width=140
+            )
+            key_label.grid(row=i, column=1, sticky="w", padx=(0, 10), pady=8)
+            self.shortcut_buttons[action] = key_label
+
+            ctk.CTkButton(
+                shortcuts_card, text="Change", width=90,
+                command=lambda a=action: self._start_capture(a)
+            ).grid(row=i, column=2, sticky="w", padx=(0, 15), pady=8)
+
+        self.settings_status = ctk.CTkLabel(parent, text="", text_color=GREEN, anchor="w")
+        self.settings_status.grid(row=2, column=0, sticky="w", padx=20, pady=(0, 10))
 
     def _save_settings(self):
         core.save_business_info({
@@ -365,7 +502,7 @@ class BillingApp(ctk.CTk):
             "address": self.biz_address_entry.get(),
             "phone": self.biz_phone_entry.get(),
         })
-        self.settings_status.configure(text="Saved.")
+        self.settings_status.configure(text="Saved.", text_color=GREEN)
 
     # ---------- Item form logic ----------
 
@@ -430,12 +567,12 @@ class BillingApp(ctk.CTk):
         self.qty_entry.insert(0, str(item["quantity"]))
 
         self.editing_index = index
-        self.add_button.configure(text="Update Item")
+        self.add_button.configure(text=f"Update Item ({pretty_key(self.keybindings['add_item'])})")
         self.cancel_edit_button.grid(row=0, column=4, padx=(0, 10), pady=15)
 
     def _cancel_edit(self, clear_form=True):
         self.editing_index = None
-        self.add_button.configure(text="+ Add Item")
+        self.add_button.configure(text=f"+ Add Item ({pretty_key(self.keybindings['add_item'])})")
         self.cancel_edit_button.grid_forget()
         if clear_form:
             self._clear_form()

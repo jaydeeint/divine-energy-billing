@@ -19,6 +19,13 @@ ASSETS_DIR = os.path.join(APP_DIR, "assets")
 EXCEL_PATH = os.path.join(APP_DIR, "transactions.xlsx")
 INVOICE_COUNTER_PATH = os.path.join(APP_DIR, "invoice_counter.txt")
 BUSINESS_INFO_PATH = os.path.join(ASSETS_DIR, "business_info.json")
+KEYBINDINGS_PATH = os.path.join(APP_DIR, "keybindings.json")
+
+DEFAULT_KEYBINDINGS = {
+    "add_item": "<Control-Return>",
+    "generate_bill": "<Control-g>",
+    "clear_all": "<Control-Delete>",
+}
 
 EXCEL_HEADERS = [
     "Date", "Bill", "Product", "Quantity", "Price", "Subtotal", "Delivery Charge", "Grand Total",
@@ -61,6 +68,27 @@ def save_business_info(info):
     os.makedirs(ASSETS_DIR, exist_ok=True)
     payload = {k: (info.get(k) or "").strip() for k in DEFAULT_BUSINESS_INFO}
     with open(BUSINESS_INFO_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+
+
+# ---------- Keyboard shortcuts ----------
+
+def get_keybindings():
+    if not os.path.exists(KEYBINDINGS_PATH):
+        return dict(DEFAULT_KEYBINDINGS)
+    try:
+        with open(KEYBINDINGS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return dict(DEFAULT_KEYBINDINGS)
+    bindings = dict(DEFAULT_KEYBINDINGS)
+    bindings.update({k: v for k, v in data.items() if k in DEFAULT_KEYBINDINGS and v})
+    return bindings
+
+
+def save_keybindings(bindings):
+    payload = {k: bindings.get(k, DEFAULT_KEYBINDINGS[k]) for k in DEFAULT_KEYBINDINGS}
+    with open(KEYBINDINGS_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2)
 
 
